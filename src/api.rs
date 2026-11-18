@@ -3,6 +3,79 @@ use squadron_extension_api::forge;
 use squadron_extension_api::{Request, Response, host};
 
 pub const API: &str = "https://api.bitbucket.org/2.0";
+pub const NO_USER_SCOPE: &str =
+    "Add the read:user:bitbucket scope to the Bitbucket API token to list your pull requests.";
+pub const NO_PIPELINE_SCOPE: &str =
+    "Add the read:pipeline:bitbucket scope to the Bitbucket API token to see pipelines.";
+const MOST: usize = 1000;
+
+pub fn accounts() -> Result<Vec<String>, String> {
+    let found: Vec<String> = host::accounts().into_iter().map(|a| a.id).collect();
+    if found.is_empty() {
+        return Err(forge::no_account(json!({
+            "en": "Add a Bitbucket account in Settings › Extensions › Bitbucket.",
+            "fr": "Ajoutez un compte Bitbucket dans Réglages › Extensions › Bitbucket.",
+        })));
+    }
+    Ok(found)
+}
+
+pub fn email(account: &str) -> String {
+    host::accounts()
+        .into_iter()
+        .find(|a| a.id == account)
+        .and_then(|a| a.fields.into_iter().find(|(k, _)| k == "email"))
+        .map(|(_, v)| v.to_lowercase())
+        .unwrap_or_default()
+}
+
+pub fn ordered(mut accounts: Vec<String>, known: Option<String>) -> Vec<String> {
+    if let Some(i) = known.and_then(|k| accounts.iter().position(|a| *a == k)) {
+        let first = accounts.remove(i);
+        accounts.insert(0, first);
+    }
+    accounts
+}
+
+pub fn scoped(error: &str) -> bool {
+    error == NO_USER_SCOPE || error == NO_PIPELINE_SCOPE
+}
+
+pub fn denied(error: &str) -> bool {
+    scoped(error)
+        || ["\"code\":\"account\"", "answered 403", "answered 404"]
+            .iter()
+            .any(|mark| error.contains(mark))
+}
+
+pub fn send(
+    account: &str,
+    method: &str,
+    path: &str,
+    query: &[(&str, &str)],
+    body: Option<Value>,
+) -> Result<Value, String> {
+    let request = request(
+        method,
+        url(path, query),
+        account,
+        body.map(|b| b.to_string()),
+    );
+    answer(host::fetch(&request)?)
+}
+
+pub fn every(account: &str, path: &str, query: &[(&str, &str)]) -> Result<Vec<Value>, String> {
+    let mut found = Vec::new();
+    let mut next = url(path, query);
+    loop {
+        let page = send(account, "GET", &next, &[], None)?;
+        found.extend(page["values"].as_array().cloned().unwrap_or_default());
+        match page["next"].as_str() {
+            Some(link) if link.starts_with(API) && found.len() < MOST => next = link.into(),
+            _ => return Ok(found),
+        }
+    }
+}
 
 pub fn encode(text: &str) -> String {
     text.bytes()
@@ -85,6 +158,24 @@ pub fn answer(response: Response) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tries_the_account_that_reached_the_workspace_first() {
+        let all = vec!["a1".to_string(), "a2".into(), "a3".into()];
+        assert_eq!(ordered(all.clone(), Some("a2".into())), ["a2", "a1", "a3"]);
+        assert_eq!(ordered(all.clone(), Some("gone".into())), all);
+        assert_eq!(ordered(all.clone(), None), all);
+    }
+
+    #[test]
+    fn tells_a_refused_repository_from_another_failure() {
+        assert!(denied(&refused()));
+        assert!(denied("Bitbucket answered 404: Repository not found"));
+        assert!(denied("Bitbucket answered 403: Forbidden"));
+        assert!(denied(NO_PIPELINE_SCOPE) && scoped(NO_PIPELINE_SCOPE));
+        assert!(!scoped("Bitbucket answered 403: Forbidden"));
+        assert!(!denied("Bitbucket answered 400: Bad request"));
+    }
 
     #[test]
     fn encodes_queries_bitbucket_reads() {

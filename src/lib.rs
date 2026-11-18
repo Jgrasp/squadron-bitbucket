@@ -1,10 +1,51 @@
 use serde_json::{Value, json};
-use squadron_extension_api::forge;
-use squadron_extension_api::{Account, Extension, squadron_extension};
+use squadron_extension_api::forge::{self, BranchArgs, Input, NoArgs, NumberArgs};
+use squadron_extension_api::{Account, Extension, host, squadron_extension};
 
 mod api;
+mod pulls;
+mod reads;
+
+use reads::Repo;
 
 struct Bitbucket;
+
+fn on_repo<A, T>(
+    input: &str,
+    work: impl Fn(&Repo, &A) -> Result<T, String>,
+) -> Result<String, String>
+where
+    A: Default + serde::de::DeserializeOwned,
+    T: serde::Serialize,
+{
+    let asked: Input<A> = forge::input(input)?;
+    let (owner, name) = reads::owner_and_name(&asked.repo, &asked.groups)?;
+    let key = format!("workspace:{}", owner.to_lowercase());
+    let known = host::state_get(&key);
+    let mut last = String::new();
+    for account in api::ordered(api::accounts()?, known.clone()) {
+        let repo = Repo {
+            account: account.clone(),
+            owner: owner.clone(),
+            name: name.clone(),
+        };
+        match work(&repo, &asked.args) {
+            Ok(found) => {
+                if known.as_deref() != Some(&account) {
+                    host::state_set(&key, Some(&account));
+                }
+                return forge::answer(&found);
+            }
+            Err(error) if api::denied(&error) => {
+                if last.is_empty() || !api::scoped(&last) {
+                    last = error;
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last)
+}
 
 fn checked(status: u16, body: &str) -> Result<String, String> {
     match status {
@@ -40,8 +81,22 @@ impl Extension for Bitbucket {
         checked(me.status, &me.body)
     }
 
-    fn forge(call: String, _input: String) -> Result<String, String> {
-        Err(forge::unsupported(&call))
+    fn forge(call: String, input: String) -> Result<String, String> {
+        match call.as_str() {
+            "pull" => on_repo(&input, |repo, args: &BranchArgs| {
+                reads::pull(repo, &args.branch)
+            }),
+            "numbered" => on_repo(&input, |repo, args: &NumberArgs| {
+                reads::numbered(repo, args.number)
+            }),
+            "lists" => on_repo(&input, |repo, _: &NoArgs| reads::lists(repo)),
+            "remarks" => on_repo(&input, |repo, args: &NumberArgs| {
+                reads::remarks(repo, args.number)
+            }),
+            "me" => on_repo(&input, |repo, _: &NoArgs| reads::me(repo)),
+            "runs" => on_repo(&input, |repo, _: &NoArgs| reads::runs(repo)),
+            _ => Err(forge::unsupported(&call)),
+        }
     }
 }
 
