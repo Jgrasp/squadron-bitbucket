@@ -1,0 +1,45 @@
+{
+  "id": "bitbucket",
+  "version": "0.1.0",
+  "api": 1,
+  "squadron": ">=0.53.0",
+  "name": { "en": "Bitbucket", "fr": "Bitbucket" },
+  "description": {
+    "en": "Pull requests and Pipelines runs of your Bitbucket Cloud projects in Squadron: review, comment, merge",
+    "fr": "Les pull requests et les runs Pipelines de vos projets Bitbucket Cloud dans Squadron : relire, commenter, fusionner"
+  },
+  "logo": "logo.svg",
+  "wasm": "target/wasm32-wasip2/release/bitbucket.wasm",
+  "permissions": { "network": ["api.bitbucket.org"] },
+  "contributes": {
+    "accounts": {
+      "label": { "en": "Bitbucket accounts", "fr": "Comptes Bitbucket" },
+      "check": true,
+      "fields": [
+        {
+          "id": "email",
+          "label": { "en": "Email", "fr": "E-mail" },
+          "hint": {
+            "en": "The email of your Atlassian account",
+            "fr": "L’adresse e-mail de votre compte Atlassian"
+          }
+        },
+        {
+          "id": "token",
+          "label": { "en": "API token", "fr": "Jeton d’API" },
+          "kind": "secret",
+          "hint": {
+            "en": "Create an API token with scopes for Bitbucket: read:repository:bitbucket, read:pullrequest:bitbucket, write:pullrequest:bitbucket, read:user:bitbucket, read:pipeline:bitbucket",
+            "fr": "Créer un jeton d’API avec des scopes pour Bitbucket : read:repository:bitbucket, read:pullrequest:bitbucket, write:pullrequest:bitbucket, read:user:bitbucket, read:pipeline:bitbucket"
+          },
+          "url": "https://id.atlassian.com/manage-profile/security/api-tokens"
+        }
+      ]
+    },
+    "forge": {
+      "remotes": ["^(?:ssh\\.)?bitbucket\\.org/(?<owner>[A-Za-z0-9_.-]+)/(?<name>[A-Za-z0-9_.-]+)$"],
+      "links": ["https?://(?:www\\.)?bitbucket\\.org/(?<owner>[A-Za-z0-9_.-]+)/(?<name>[A-Za-z0-9_.-]+)/pull-requests/(?<number>[0-9]+)"],
+      "calls": ["pull", "numbered", "lists", "remarks", "me", "reply", "resolve", "post", "merge", "update", "runs"]
+    }
+  }
+}
