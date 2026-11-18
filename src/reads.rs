@@ -1,4 +1,4 @@
-use crate::api::{self, NO_PIPELINE_SCOPE, NO_USER_SCOPE};
+use crate::api;
 use crate::pulls::{self, FIELDS, text};
 use serde_json::Value;
 use squadron_extension_api::forge::{Lists, Numbered, Person, Pull, Remark, Run};
@@ -56,12 +56,15 @@ pub fn uuid(repo: &Repo) -> Result<String, String> {
     }
     let user = repo.get("/user", &[("fields", "uuid")]).map_err(|e| {
         if e.contains("answered 403") {
-            NO_USER_SCOPE.to_string()
+            api::no_user_scope()
         } else {
             e
         }
     })?;
-    let uuid = user["uuid"].as_str().ok_or(NO_USER_SCOPE)?.to_string();
+    let uuid = user["uuid"]
+        .as_str()
+        .ok_or_else(api::no_user_scope)?
+        .to_string();
     host::state_set(&key, Some(&uuid));
     Ok(uuid)
 }
@@ -299,7 +302,7 @@ pub fn runs(repo: &Repo) -> Result<Vec<Run>, String> {
         )
         .map_err(|e| {
             if e.contains("answered 403") {
-                NO_PIPELINE_SCOPE.to_string()
+                api::no_pipeline_scope()
             } else {
                 e
             }

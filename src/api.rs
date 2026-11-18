@@ -3,10 +3,28 @@ use squadron_extension_api::forge;
 use squadron_extension_api::{Request, Response, host};
 
 pub const API: &str = "https://api.bitbucket.org/2.0";
-pub const NO_USER_SCOPE: &str =
-    "Add the read:user:bitbucket scope to the Bitbucket API token to list your pull requests.";
-pub const NO_PIPELINE_SCOPE: &str =
-    "Add the read:pipeline:bitbucket scope to the Bitbucket API token to see pipelines.";
+
+pub fn no_user_scope() -> String {
+    forge::failure(
+        None,
+        json!({
+            "en": "Add the read:user:bitbucket scope to the Bitbucket API token to list your pull requests.",
+            "fr": "Ajoutez le scope read:user:bitbucket au jeton d’API Bitbucket pour lister vos pull requests.",
+        }),
+        None,
+    )
+}
+
+pub fn no_pipeline_scope() -> String {
+    forge::failure(
+        None,
+        json!({
+            "en": "Add the read:pipeline:bitbucket scope to the Bitbucket API token to see pipelines.",
+            "fr": "Ajoutez le scope read:pipeline:bitbucket au jeton d’API Bitbucket pour voir les pipelines.",
+        }),
+        None,
+    )
+}
 const MOST: usize = 1000;
 
 pub fn accounts() -> Result<Vec<String>, String> {
@@ -38,7 +56,7 @@ pub fn ordered(mut accounts: Vec<String>, known: Option<String>) -> Vec<String> 
 }
 
 pub fn scoped(error: &str) -> bool {
-    error == NO_USER_SCOPE || error == NO_PIPELINE_SCOPE
+    error == no_user_scope() || error == no_pipeline_scope()
 }
 
 pub fn denied(error: &str) -> bool {
@@ -172,7 +190,7 @@ mod tests {
         assert!(denied(&refused()));
         assert!(denied("Bitbucket answered 404: Repository not found"));
         assert!(denied("Bitbucket answered 403: Forbidden"));
-        assert!(denied(NO_PIPELINE_SCOPE) && scoped(NO_PIPELINE_SCOPE));
+        assert!(denied(&no_pipeline_scope()) && scoped(&no_user_scope()));
         assert!(!scoped("Bitbucket answered 403: Forbidden"));
         assert!(!denied("Bitbucket answered 400: Bad request"));
     }
