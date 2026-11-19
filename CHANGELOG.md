@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 · 2026-11-19
+
+- Pipelines run on a pull request show its number and title and are filed under PR checks
+
 ## 0.1.0 · 2026-11-18
 
 - Pull requests of your Bitbucket Cloud projects in Squadron: the pull request of each agent's branch, the ones to review, yours and the others, with their checks and reviewers
