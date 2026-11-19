@@ -1,5 +1,9 @@
 # Journal des modifications
 
+## 0.2.0 · 2026-11-19
+
+- Les pipelines lancés sur une pull request affichent son numéro et son titre et sont rangés dans les checks de PR
+
 ## 0.1.0 · 2026-11-18
 
 - Les pull requests de vos projets Bitbucket Cloud dans Squadron : celle de la branche de chaque agent, celles à relire, les vôtres et les autres, avec leurs checks et leurs relecteurs
