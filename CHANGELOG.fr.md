@@ -1,6 +1,6 @@
 # Journal des modifications
 
-## 0.1.0 · 2026-11-18
+## 0.1.0 · 2026-11-19
 
 - Les pull requests de vos projets Bitbucket Cloud dans Squadron : celle de la branche de chaque agent, celles à relire, les vôtres et les autres, avec leurs checks et leurs relecteurs
 - Des revues avec commentaires de ligne, résumé et verdict, des réponses aux remarques, des fils résolus affichés et résolus depuis Squadron, des fusions, et le changement du titre et de la description
