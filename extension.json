@@ -1,8 +1,8 @@
 {
   "id": "bitbucket",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "api": 1,
-  "squadron": ">=0.53.0",
+  "squadron": ">=0.54.0",
   "name": { "en": "Bitbucket", "fr": "Bitbucket" },
   "description": {
     "en": "Pull requests and Pipelines runs of your Bitbucket Cloud projects in Squadron: review, comment, merge",
@@ -29,9 +29,16 @@
           "label": { "en": "API token", "fr": "Jeton d’API" },
           "kind": "secret",
           "hint": {
-            "en": "Create an API token with scopes for Bitbucket: read:repository:bitbucket, read:pullrequest:bitbucket, write:pullrequest:bitbucket, read:user:bitbucket, read:pipeline:bitbucket",
-            "fr": "Créer un jeton d’API avec des scopes pour Bitbucket : read:repository:bitbucket, read:pullrequest:bitbucket, write:pullrequest:bitbucket, read:user:bitbucket, read:pipeline:bitbucket"
+            "en": "Create an API token with these scopes for Bitbucket",
+            "fr": "Créer un jeton d’API avec ces scopes pour Bitbucket"
           },
+          "copy": [
+            "read:repository:bitbucket",
+            "read:pullrequest:bitbucket",
+            "write:pullrequest:bitbucket",
+            "read:user:bitbucket",
+            "read:pipeline:bitbucket"
+          ],
           "url": "https://id.atlassian.com/manage-profile/security/api-tokens"
         }
       ]
