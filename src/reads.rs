@@ -246,7 +246,7 @@ pub fn me(repo: &Repo) -> Result<Person, String> {
         .map(|user| person(&user))
 }
 
-const RUN_FIELDS: &str = "values.uuid,values.build_number,values.state.name,values.state.result.name,values.state.stage.name,values.target.ref_name,values.target.selector.type,values.target.selector.pattern,values.target.commit.message,values.trigger.name,values.creator.display_name,values.creator.links.avatar.href,values.created_on,values.completed_on";
+const RUN_FIELDS: &str = "values.uuid,values.build_number,values.state.name,values.state.result.name,values.state.stage.name,values.target.type,values.target.ref_name,values.target.source,values.target.pullrequest.id,values.target.selector.type,values.target.selector.pattern,values.target.commit.message,values.trigger.name,values.creator.display_name,values.creator.links.avatar.href,values.created_on,values.completed_on";
 
 pub fn run_of(value: &Value, slug: &str) -> Run {
     let state = &value["state"];
@@ -270,6 +270,11 @@ pub fn run_of(value: &Value, slug: &str) -> Run {
         format!("{kind}: {pattern}")
     };
     let number = value["build_number"].as_u64().unwrap_or_default();
+    let target = &value["target"];
+    let id = &target["pullrequest"]["id"];
+    let pull = (target["type"] == "pipeline_pullrequest_target")
+        .then(|| id.as_u64().or_else(|| id.as_str()?.parse().ok()))
+        .flatten();
     Run {
         id: text(&value["uuid"]),
         number,
@@ -279,8 +284,15 @@ pub fn run_of(value: &Value, slug: &str) -> Run {
             .next()
             .unwrap_or_default()
             .to_string(),
-        event: text(&value["trigger"]["name"]).to_lowercase(),
-        branch: text(&value["target"]["ref_name"]),
+        event: match pull {
+            Some(_) => "pullrequest".into(),
+            None => text(&value["trigger"]["name"]).to_lowercase(),
+        },
+        branch: match pull {
+            Some(_) => text(&target["source"]),
+            None => text(&target["ref_name"]),
+        },
+        pull,
         status: status.into(),
         url: format!("https://bitbucket.org/{slug}/pipelines/results/{number}"),
         started: text(&value["created_on"]),
@@ -431,6 +443,35 @@ mod tests {
             "a/b",
         );
         assert_eq!(failed.status, "failure");
+    }
+
+    #[test]
+    fn tells_pull_request_pipelines_from_branch_pipelines() {
+        let check = run_of(
+            &json!({"target": {"type": "pipeline_pullrequest_target", "source": "feat/x", "destination": "main", "pullrequest": {"id": 17}, "selector": {"type": "pull-requests", "pattern": "**"}}, "trigger": {"name": "PUSH"}}),
+            "a/b",
+        );
+        assert_eq!(
+            (check.pull, check.event.as_str(), check.branch.as_str()),
+            (Some(17), "pullrequest", "feat/x")
+        );
+        let quoted = run_of(
+            &json!({"target": {"type": "pipeline_pullrequest_target", "pullrequest": {"id": "3"}}}),
+            "a/b",
+        );
+        assert_eq!(quoted.pull, Some(3));
+        let pipeline = run_of(
+            &json!({"target": {"type": "pipeline_ref_target", "ref_name": "main", "selector": {"type": "branches", "pattern": "main"}}, "trigger": {"name": "PUSH"}}),
+            "a/b",
+        );
+        assert_eq!(
+            (
+                pipeline.pull,
+                pipeline.event.as_str(),
+                pipeline.branch.as_str()
+            ),
+            (None, "push", "main")
+        );
     }
 
     #[test]
