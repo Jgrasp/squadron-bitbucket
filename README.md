@@ -18,7 +18,7 @@ Every project whose `origin` is on `bitbucket.org` then gets, in Squadron:
 
 - the pull request of each agent's branch, and chips for the pull request links in conversations;
 - the pull requests to review, yours and the others, with their checks and reviewers;
-- reviews with line comments, a summary and a verdict, replies to remarks, resolved threads, merges, and title and description changes, from you or from an agent;
+- reviews with line comments, a summary and a verdict, replies to remarks, resolved threads, merges with the method allowed on the destination branch and the source branch closed or kept, and title and description changes, from you or from an agent;
 - the Pipelines runs, with a notification when one ends.
 
 ## What it asks Squadron for
