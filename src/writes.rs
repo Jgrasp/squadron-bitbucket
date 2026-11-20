@@ -116,11 +116,15 @@ pub fn post(repo: &Repo, args: &PostArgs) -> Result<Posted, String> {
 
 pub fn merging(args: &MergeArgs, found: &Value) -> Result<Value, String> {
     let mut body = json!({});
-    if let Some(method) = &args.method {
-        body["merge_strategy"] = json!(pulls::strategy(
-            method,
-            &found["destination"]["branch"]["merge_strategies"]
-        )?);
+    let branch = &found["destination"]["branch"];
+    match &args.method {
+        Some(method) => {
+            body["merge_strategy"] = json!(pulls::strategy(method, &branch["merge_strategies"])?)
+        }
+        None if branch["default_merge_strategy"].is_string() => {
+            body["merge_strategy"] = branch["default_merge_strategy"].clone()
+        }
+        None => {}
     }
     if let Some(close) = args
         .delete_branch
@@ -137,7 +141,7 @@ pub fn merge(repo: &Repo, args: &MergeArgs) -> Result<(), String> {
         &repo.path(&path),
         &[(
             "fields",
-            "close_source_branch,destination.branch.merge_strategies",
+            "close_source_branch,destination.branch.merge_strategies,destination.branch.default_merge_strategy",
         )],
     )?;
     send(
@@ -254,6 +258,12 @@ mod tests {
             Ok(json!({ "merge_strategy": "squash_fast_forward", "close_source_branch": false }))
         );
         assert_eq!(merging(&args(None, None), &json!({})), Ok(json!({})));
+        let squashing =
+            json!({ "destination": { "branch": { "default_merge_strategy": "squash" } } });
+        assert_eq!(
+            merging(&args(None, Some(true)), &squashing),
+            Ok(json!({ "merge_strategy": "squash", "close_source_branch": true }))
+        );
     }
 
     #[test]
