@@ -110,9 +110,16 @@ pub fn diffstat(stat: Option<&Value>) -> (Option<u64>, Option<u64>, Option<u64>)
     )
 }
 
-pub fn numbered(repo: &Repo, number: u64) -> Result<Numbered, String> {
+pub fn by_number(repo: &Repo, number: u64) -> Result<Pull, String> {
     let path = repo.path(&format!("/pullrequests/{number}"));
     let found = repo.get(&path, &[("fields", &FIELDS.replace("values.", ""))])?;
+    let me = uuid(repo).unwrap_or_default();
+    Ok(pulls::pull_of(&found, &statuses(repo, &found["id"]), &me))
+}
+
+pub fn numbered(repo: &Repo, number: u64) -> Result<Numbered, String> {
+    let path = repo.path(&format!("/pullrequests/{number}"));
+    let pull = by_number(repo, number)?;
     let stat = repo
         .get(
             &format!("{path}/diffstat"),
@@ -123,9 +130,8 @@ pub fn numbered(repo: &Repo, number: u64) -> Result<Numbered, String> {
         )
         .ok();
     let (additions, deletions, files) = diffstat(stat.as_ref());
-    let me = uuid(repo).unwrap_or_default();
     Ok(Numbered {
-        pull: pulls::pull_of(&found, &statuses(repo, &found["id"]), &me),
+        pull,
         additions,
         deletions,
         files,

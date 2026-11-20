@@ -19,7 +19,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "bitbucket"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "regex",
  "serde",
@@ -221,8 +221,8 @@ dependencies = [
 
 [[package]]
 name = "squadron_extension_api"
-version = "1.13.0"
-source = "git+https://github.com/Jgrasp/squadron-extensions#ea441b5c1bbc027e0661d9a4dbc87a9cd811b857"
+version = "1.14.0"
+source = "git+https://github.com/Jgrasp/squadron-extensions#08fda96c70eb9f7702d73100dff6daa6d00765bd"
 dependencies = [
  "serde",
  "serde_json",

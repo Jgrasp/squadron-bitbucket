@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## 0.3.0 · 2026-11-20
+
+- Ouvrez une pull request sur Bitbucket depuis la branche poussée d’un agent, avec son titre, sa description et son état brouillon
+- La nouvelle pull request reçoit les relecteurs par défaut du dépôt, comme quand vous l’ouvrez sur Bitbucket
+- Un message clair quand la branche n’a aucun changement à fusionner ou a déjà une pull request ouverte
+
 ## 0.2.0 · 2026-11-20
 
 - Les fusions utilisent la méthode choisie dans Réglages › Pull requests de Squadron quand la branche de destination l’autorise : commit de fusion, squash ou rebase
