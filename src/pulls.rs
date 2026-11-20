@@ -1,7 +1,7 @@
 use serde_json::Value;
 use squadron_extension_api::forge::{Pull, Reviewer};
 
-pub const FIELDS: &str = "values.id,values.title,values.description,values.state,values.draft,values.comment_count,values.links.html.href,values.source.branch.name,values.source.commit.hash,values.destination.branch.name,values.author.display_name,values.author.links.avatar.href,values.updated_on,values.participants.approved,values.participants.state,values.participants.role,values.participants.participated_on,values.participants.user.uuid,values.participants.user.display_name,values.participants.user.links.avatar.href,values.reviewers.uuid,values.reviewers.display_name,values.reviewers.links.avatar.href";
+pub const FIELDS: &str = "values.id,values.title,values.description,values.state,values.draft,values.comment_count,values.links.html.href,values.source.branch.name,values.source.commit.hash,values.destination.branch.name,values.destination.branch.merge_strategies,values.close_source_branch,values.author.display_name,values.author.links.avatar.href,values.updated_on,values.participants.approved,values.participants.state,values.participants.role,values.participants.participated_on,values.participants.user.uuid,values.participants.user.display_name,values.participants.user.links.avatar.href,values.reviewers.uuid,values.reviewers.display_name,values.reviewers.links.avatar.href";
 
 pub fn text(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_string()
@@ -38,6 +38,33 @@ fn checks(statuses: &Value) -> Option<String> {
     } else {
         Some("passing".into())
     }
+}
+
+const METHODS: [(&str, &[&str]); 3] = [
+    ("merge", &["merge_commit"]),
+    ("squash", &["squash", "squash_fast_forward"]),
+    ("rebase", &["rebase_fast_forward"]),
+];
+
+pub fn methods(strategies: &Value) -> Vec<String> {
+    let allowed = list(strategies);
+    METHODS
+        .iter()
+        .filter(|(_, s)| s.iter().any(|s| allowed.iter().any(|a| a == s)))
+        .map(|(m, _)| m.to_string())
+        .collect()
+}
+
+pub fn strategy(method: &str, strategies: &Value) -> Result<&'static str, String> {
+    let (_, candidates) = METHODS
+        .iter()
+        .find(|(m, _)| *m == method)
+        .ok_or_else(|| format!("Bitbucket cannot merge with {method}."))?;
+    let allowed = list(strategies);
+    Ok(candidates
+        .iter()
+        .find(|s| allowed.iter().any(|a| a == *s))
+        .unwrap_or(&candidates[0]))
 }
 
 pub fn pull_of(found: &Value, statuses: &Value, me: &str) -> Pull {
@@ -105,6 +132,10 @@ pub fn pull_of(found: &Value, statuses: &Value, me: &str) -> Pull {
         head_at: None,
         reviewers,
         conflicts: false,
+        merge_methods: methods(&found["destination"]["branch"]["merge_strategies"]),
+        delete_branch: found["close_source_branch"].as_bool(),
+        delete_branch_settable: true,
+        branch_protected: false,
     }
 }
 
@@ -119,7 +150,8 @@ mod tests {
             "id": 2108, "title": "feat(prevision): [FIL-671] prévision", "state": "OPEN", "draft": false, "comment_count": 3,
             "links": { "html": { "href": "https://bitbucket.org/akki-team/fileas/pull-requests/2108" } },
             "source": { "branch": { "name": "dev/FIL-671" }, "commit": { "hash": "1094c23e6813" } },
-            "destination": { "branch": { "name": "feature/FIL-671" } },
+            "destination": { "branch": { "name": "feature/FIL-671", "merge_strategies": ["merge_commit", "fast_forward", "squash_fast_forward"] } },
+            "close_source_branch": true,
             "author": { "display_name": "Quentin Briais" }, "updated_on": "2026-10-23T09:27:57+00:00",
             "reviewers": [{ "uuid": "{a}", "display_name": "Ann", "links": { "avatar": { "href": "https://a/ann.png" } } }, { "uuid": "{me}", "display_name": "Me", "links": { "avatar": { "href": "https://a/me.png" } } }, { "uuid": "{c}", "display_name": "Carl", "links": { "avatar": { "href": "https://a/carl.png" } } }],
             "participants": [
@@ -171,6 +203,10 @@ mod tests {
                 ],
                 conflicts: false,
                 mergeable: false,
+                merge_methods: vec!["merge".into(), "squash".into()],
+                delete_branch: Some(true),
+                delete_branch_settable: true,
+                branch_protected: false,
             }
         );
         assert_eq!(pull_of(&found, &Value::Null, "{b}").checks, None);
@@ -208,5 +244,31 @@ mod tests {
         merged["state"] = json!("MERGED");
         let merged = pull_of(&merged, &passed, "");
         assert_eq!((merged.state.as_str(), merged.mergeable), ("merged", false));
+    }
+
+    #[test]
+    fn offers_the_merge_methods_of_the_destination_branch() {
+        let every = json!([
+            "merge_commit",
+            "squash",
+            "fast_forward",
+            "squash_fast_forward",
+            "rebase_fast_forward",
+            "rebase_merge"
+        ]);
+        assert_eq!(methods(&every), ["merge", "squash", "rebase"]);
+        assert_eq!(
+            methods(&json!(["fast_forward", "rebase_merge"])),
+            Vec::<String>::new()
+        );
+        assert_eq!(methods(&Value::Null), Vec::<String>::new());
+        assert_eq!(strategy("rebase", &every), Ok("rebase_fast_forward"));
+        assert_eq!(strategy("squash", &every), Ok("squash"));
+        assert_eq!(
+            strategy("squash", &json!(["squash_fast_forward"])),
+            Ok("squash_fast_forward")
+        );
+        assert_eq!(strategy("merge", &Value::Null), Ok("merge_commit"));
+        assert!(strategy("octopus", &every).is_err());
     }
 }

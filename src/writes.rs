@@ -1,7 +1,10 @@
 use crate::api;
+use crate::pulls;
 use crate::reads::Repo;
 use serde_json::{Map, Value, json};
-use squadron_extension_api::forge::{Draft, PostArgs, Posted, ReplyArgs, ResolveArgs, UpdateArgs};
+use squadron_extension_api::forge::{
+    Draft, MergeArgs, PostArgs, Posted, ReplyArgs, ResolveArgs, UpdateArgs,
+};
 
 fn comment_id(to: &str) -> Result<u64, String> {
     to.parse()
@@ -111,12 +114,37 @@ pub fn post(repo: &Repo, args: &PostArgs) -> Result<Posted, String> {
     })
 }
 
-pub fn merge(repo: &Repo, number: u64) -> Result<(), String> {
+pub fn merging(args: &MergeArgs, found: &Value) -> Result<Value, String> {
+    let mut body = json!({});
+    if let Some(method) = &args.method {
+        body["merge_strategy"] = json!(pulls::strategy(
+            method,
+            &found["destination"]["branch"]["merge_strategies"]
+        )?);
+    }
+    if let Some(close) = args
+        .delete_branch
+        .or(found["close_source_branch"].as_bool())
+    {
+        body["close_source_branch"] = json!(close);
+    }
+    Ok(body)
+}
+
+pub fn merge(repo: &Repo, args: &MergeArgs) -> Result<(), String> {
+    let path = format!("/pullrequests/{}", args.number);
+    let found = repo.get(
+        &repo.path(&path),
+        &[(
+            "fields",
+            "close_source_branch,destination.branch.merge_strategies",
+        )],
+    )?;
     send(
         repo,
         "POST",
-        &format!("/pullrequests/{number}/merge"),
-        Some(json!({})),
+        &format!("{path}/merge"),
+        Some(merging(args, &found)?),
     )
     .map(|_| ())
 }
@@ -207,6 +235,25 @@ mod tests {
             changes(&title, &found),
             json!({ "title": "Export", "reviewers": [{ "uuid": "{a}" }] })
         );
+    }
+
+    #[test]
+    fn always_says_whether_merging_closes_the_source_branch() {
+        let found = json!({ "close_source_branch": true, "destination": { "branch": { "merge_strategies": ["merge_commit", "squash_fast_forward"] } } });
+        let args = |method: Option<&str>, delete_branch| MergeArgs {
+            number: 7,
+            method: method.map(str::to_string),
+            delete_branch,
+        };
+        assert_eq!(
+            merging(&args(None, None), &found),
+            Ok(json!({ "close_source_branch": true }))
+        );
+        assert_eq!(
+            merging(&args(Some("squash"), Some(false)), &found),
+            Ok(json!({ "merge_strategy": "squash_fast_forward", "close_source_branch": false }))
+        );
+        assert_eq!(merging(&args(None, None), &json!({})), Ok(json!({})));
     }
 
     #[test]

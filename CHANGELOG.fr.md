@@ -1,5 +1,12 @@
 # Journal des modifications
 
+## 0.2.0 · 2026-11-20
+
+- Les fusions utilisent la méthode choisie dans Réglages › Pull requests de Squadron quand la branche de destination l’autorise : commit de fusion, squash ou rebase
+- La confirmation de fusion part de la case « Fermer la branche source » de la pull request, et Bitbucket supprime la branche source, ou la garde, selon votre choix
+- Fusionner ne décoche plus « Fermer la branche source » sur une pull request où elle a été cochée après sa création
+- Nécessite Squadron 0.56.0 ou plus récent
+
 ## 0.1.0 · 2026-11-19
 
 - Les pull requests de vos projets Bitbucket Cloud dans Squadron : celle de la branche de chaque agent, celles à relire, les vôtres et les autres, avec leurs checks et leurs relecteurs
