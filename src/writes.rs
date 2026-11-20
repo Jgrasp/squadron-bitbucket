@@ -246,15 +246,25 @@ pub fn create(repo: &Repo, args: &CreateArgs) -> Result<Pull, String> {
         )
         .unwrap_or_default()
     };
-    let made = send(
-        repo,
-        "POST",
-        "/pullrequests",
-        Some(opening(args, &defaults, &me)),
+    opened(
+        args,
+        &defaults,
+        &me,
+        |body| send(repo, "POST", "/pullrequests", Some(body)),
+        |number| reads::by_number(repo, number),
     )
-    .map_err(|e| refusal(e, args))?;
+}
+
+pub fn opened(
+    args: &CreateArgs,
+    defaults: &[Value],
+    me: &str,
+    post: impl FnOnce(Value) -> Result<Value, String>,
+    read: impl FnOnce(u64) -> Result<Pull, String>,
+) -> Result<Pull, String> {
+    let made = post(opening(args, defaults, me)).map_err(|e| refusal(e, args))?;
     let number = made["id"].as_u64().unwrap_or_default();
-    Ok(reads::by_number(repo, number).unwrap_or_else(|_| pulls::pull_of(&made, &Value::Null, &me)))
+    Ok(read(number).unwrap_or_else(|_| pulls::pull_of(&made, &Value::Null, me)))
 }
 
 #[cfg(test)]
@@ -373,6 +383,68 @@ mod tests {
         );
         let unknown = opening(&creating(""), &defaults, "");
         assert!(unknown.get("reviewers").is_none() && unknown.get("destination").is_none());
+    }
+
+    #[test]
+    fn posts_the_pull_request_and_answers_the_one_bitbucket_made() {
+        let made = json!({
+            "id": 12, "title": "Export", "description": "Sends the **ledger**", "state": "OPEN", "draft": true,
+            "source": { "branch": { "name": "feat/x" } },
+            "destination": { "branch": { "name": "main" } },
+            "close_source_branch": false,
+        });
+        let defaults = [json!({ "user": { "uuid": "{a}" } })];
+        let mut posted = Value::Null;
+        let mut asked = 0;
+        let pull = opened(
+            &creating("main"),
+            &defaults,
+            "{me}",
+            |body| {
+                posted = body;
+                Ok(made.clone())
+            },
+            |number| {
+                asked = number;
+                Ok(pulls::pull_of(&made, &Value::Null, "{me}"))
+            },
+        )
+        .unwrap();
+        assert_eq!(posted, opening(&creating("main"), &defaults, "{me}"));
+        assert_eq!(asked, 12);
+        assert_eq!(
+            (
+                pull.number,
+                pull.title.as_str(),
+                pull.branch.as_str(),
+                pull.base.as_str()
+            ),
+            (12, "Export", "feat/x", "main")
+        );
+        assert_eq!(
+            (pull.state.as_str(), pull.draft, pull.delete_branch),
+            ("open", true, Some(false))
+        );
+
+        let unread = opened(
+            &creating("main"),
+            &[],
+            "{me}",
+            |_| Ok(made.clone()),
+            |_| Err("Bitbucket answered 404: gone".into()),
+        )
+        .unwrap();
+        assert_eq!((unread.number, unread.draft), (12, true));
+
+        let refused = opened(
+            &creating("main"),
+            &[],
+            "{me}",
+            |_| Err("Bitbucket answered 400: There are no changes to be pulled".into()),
+            |_| panic!("nothing to read"),
+        )
+        .unwrap_err();
+        assert!(refused.contains("feat/x has no changes to merge into main"));
     }
 
     #[test]
