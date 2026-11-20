@@ -194,8 +194,10 @@ pub fn opening(args: &CreateArgs, defaults: &[Value], me: &str) -> Value {
         "description": args.description,
         "source": { "branch": { "name": args.branch } },
         "draft": args.draft,
-        "reviewers": reviewers,
     });
+    if !reviewers.is_empty() {
+        body["reviewers"] = json!(reviewers);
+    }
     if !args.base.is_empty() {
         body["destination"] = json!({ "branch": { "name": args.base } });
     }
@@ -240,7 +242,7 @@ pub fn create(repo: &Repo, args: &CreateArgs) -> Result<Pull, String> {
         api::every(
             &repo.account,
             &repo.path("/effective-default-reviewers"),
-            &[("fields", "next,values.user.uuid"), ("pagelen", "100")],
+            &[("fields", "next,values.user.uuid")],
         )
         .unwrap_or_default()
     };
@@ -370,8 +372,7 @@ mod tests {
             })
         );
         let unknown = opening(&creating(""), &defaults, "");
-        assert_eq!(unknown["reviewers"], json!([]));
-        assert!(unknown.get("destination").is_none());
+        assert!(unknown.get("reviewers").is_none() && unknown.get("destination").is_none());
     }
 
     #[test]
