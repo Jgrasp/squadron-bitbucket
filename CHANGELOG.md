@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 · 2026-11-20
+
+- Open a pull request on Bitbucket from an agent's pushed branch, with its title, description and draft state
+- The new pull request gets the repository's default reviewers, as when you open it on Bitbucket
+- A clear message when the branch has no changes to merge or already has an open pull request
+
 ## 0.2.0 · 2026-11-20
 
 - Merges use the method set in Squadron's Settings › Pull requests when the destination branch allows it: merge commit, squash, or rebase

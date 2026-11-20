@@ -16,7 +16,7 @@ In Settings › Extensions › Bitbucket, add an account with the email of your 
 
 Every project whose `origin` is on `bitbucket.org` then gets, in Squadron:
 
-- the pull request of each agent's branch, and chips for the pull request links in conversations;
+- the pull request of each agent's branch, opened from Squadron once the branch is pushed, with the repository's default reviewers, and chips for the pull request links in conversations;
 - the pull requests to review, yours and the others, with their checks and reviewers;
 - reviews with line comments, a summary and a verdict, replies to remarks, resolved threads, merges with the method allowed on the destination branch and the source branch closed or kept, and title and description changes, from you or from an agent;
 - the Pipelines runs, with a notification when one ends.
@@ -26,7 +26,7 @@ Every project whose `origin` is on `bitbucket.org` then gets, in Squadron:
 - HTTPS requests to `api.bitbucket.org`, Bitbucket Cloud's API.
 - Bitbucket accounts: each token stays in the system keyring. Squadron adds the email and token to the requests to Bitbucket, and the extension never reads the token.
   - `read:repository:bitbucket` reads the repository and the commit a pull request was last changed on.
-  - `read:pullrequest:bitbucket` and `write:pullrequest:bitbucket` read the pull requests, their comments and checks, and comment, approve, request changes, merge and edit them.
+  - `read:pullrequest:bitbucket` and `write:pullrequest:bitbucket` read the pull requests, their comments, checks and default reviewers, and open, comment, approve, request changes, merge and edit them.
   - `read:user:bitbucket` tells which pull requests you review or wrote, and shows your name and avatar.
   - `read:pipeline:bitbucket` shows the Pipelines runs.
 

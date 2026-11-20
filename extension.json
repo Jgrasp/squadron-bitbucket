@@ -1,6 +1,6 @@
 {
   "id": "bitbucket",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "api": 1,
   "squadron": ">=0.56.0",
   "name": { "en": "Bitbucket", "fr": "Bitbucket" },
@@ -46,7 +46,7 @@
     "forge": {
       "remotes": ["^(?:ssh\\.)?bitbucket\\.org/(?<owner>[A-Za-z0-9_.-]+)/(?<name>[A-Za-z0-9_.-]+)$"],
       "links": ["https?://(?:www\\.)?bitbucket\\.org/(?<owner>[A-Za-z0-9_.-]+)/(?<name>[A-Za-z0-9_.-]+)/pull-requests/(?<number>[0-9]+)"],
-      "calls": ["pull", "numbered", "lists", "remarks", "me", "reply", "resolve", "post", "merge", "update", "runs"]
+      "calls": ["pull", "numbered", "lists", "remarks", "me", "reply", "resolve", "post", "merge", "update", "create", "runs"]
     }
   }
 }

@@ -1,9 +1,9 @@
 use crate::api;
 use crate::pulls;
-use crate::reads::Repo;
+use crate::reads::{self, Repo};
 use serde_json::{Map, Value, json};
 use squadron_extension_api::forge::{
-    Draft, MergeArgs, PostArgs, Posted, ReplyArgs, ResolveArgs, UpdateArgs,
+    self, CreateArgs, Draft, MergeArgs, PostArgs, Posted, Pull, ReplyArgs, ResolveArgs, UpdateArgs,
 };
 
 fn comment_id(to: &str) -> Result<u64, String> {
@@ -181,6 +181,92 @@ pub fn update(repo: &Repo, args: &UpdateArgs) -> Result<(), String> {
     .map(|_| ())
 }
 
+pub fn opening(args: &CreateArgs, defaults: &[Value], me: &str) -> Value {
+    let mut reviewers: Vec<Value> = Vec::new();
+    for uuid in defaults.iter().map(|d| &d["user"]["uuid"]) {
+        let named = json!({ "uuid": uuid });
+        if !me.is_empty() && uuid.is_string() && uuid != me && !reviewers.contains(&named) {
+            reviewers.push(named);
+        }
+    }
+    let mut body = json!({
+        "title": args.title,
+        "description": args.description,
+        "source": { "branch": { "name": args.branch } },
+        "draft": args.draft,
+    });
+    if !reviewers.is_empty() {
+        body["reviewers"] = json!(reviewers);
+    }
+    if !args.base.is_empty() {
+        body["destination"] = json!({ "branch": { "name": args.base } });
+    }
+    body
+}
+
+pub fn refusal(error: String, args: &CreateArgs) -> String {
+    let said = error.to_lowercase();
+    if !said.starts_with("bitbucket answered 400") {
+        return error;
+    }
+    let (branch, base) = (&args.branch, &args.base);
+    let (en_base, fr_base) = if base.is_empty() {
+        (
+            "the main branch".to_string(),
+            "la branche principale".to_string(),
+        )
+    } else {
+        (base.clone(), base.clone())
+    };
+    let title = if said.contains("no changes") {
+        json!({
+            "en": format!("{branch} has no changes to merge into {en_base}"),
+            "fr": format!("{branch} n’a aucun changement à fusionner dans {fr_base}"),
+        })
+    } else if said.contains("already") {
+        json!({
+            "en": format!("A pull request from {branch} into {en_base} is already open"),
+            "fr": format!("Une pull request de {branch} vers {fr_base} est déjà ouverte"),
+        })
+    } else {
+        return error;
+    };
+    forge::failure(None, title, None)
+}
+
+pub fn create(repo: &Repo, args: &CreateArgs) -> Result<Pull, String> {
+    let me = reads::uuid(repo).unwrap_or_default();
+    let defaults = if me.is_empty() {
+        Vec::new()
+    } else {
+        api::every(
+            &repo.account,
+            &repo.path("/effective-default-reviewers"),
+            &[("fields", "next,values.user.uuid")],
+        )
+        .unwrap_or_default()
+    };
+    opened(
+        args,
+        &defaults,
+        &me,
+        |body| send(repo, "POST", "/pullrequests", Some(body)),
+        |number| reads::by_number(repo, number),
+    )
+}
+
+pub fn opened(
+    args: &CreateArgs,
+    defaults: &[Value],
+    me: &str,
+    post: impl FnOnce(Value) -> Result<Value, String>,
+    read: impl FnOnce(u64) -> Result<Pull, String>,
+) -> Result<Pull, String> {
+    let made = post(opening(args, defaults, me)).map_err(|e| refusal(e, args))?;
+    let number = made["id"].as_u64().unwrap_or_default();
+    Ok(read(number).unwrap_or_else(|_| pulls::pull_of(&made, &Value::Null, me)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +349,138 @@ mod tests {
         assert_eq!(
             merging(&args(None, Some(true)), &squashing),
             Ok(json!({ "merge_strategy": "squash", "close_source_branch": true }))
+        );
+    }
+
+    fn creating(base: &str) -> CreateArgs {
+        CreateArgs {
+            branch: "feat/x".into(),
+            base: base.into(),
+            title: "Export".into(),
+            description: "Sends the **ledger**".into(),
+            draft: true,
+        }
+    }
+
+    #[test]
+    fn opens_a_pull_request_with_the_default_reviewers_but_the_author() {
+        let defaults = [
+            json!({ "user": { "uuid": "{a}" } }),
+            json!({ "user": { "uuid": "{me}" } }),
+            json!({ "user": { "uuid": "{a}" } }),
+            json!({ "reviewer_type": "project" }),
+        ];
+        assert_eq!(
+            opening(&creating("main"), &defaults, "{me}"),
+            json!({
+                "title": "Export",
+                "description": "Sends the **ledger**",
+                "source": { "branch": { "name": "feat/x" } },
+                "destination": { "branch": { "name": "main" } },
+                "draft": true,
+                "reviewers": [{ "uuid": "{a}" }],
+            })
+        );
+        let unknown = opening(&creating(""), &defaults, "");
+        assert!(unknown.get("reviewers").is_none() && unknown.get("destination").is_none());
+    }
+
+    #[test]
+    fn posts_the_pull_request_and_answers_the_one_bitbucket_made() {
+        let made = json!({
+            "id": 12, "title": "Export", "description": "Sends the **ledger**", "state": "OPEN", "draft": true,
+            "source": { "branch": { "name": "feat/x" } },
+            "destination": { "branch": { "name": "main" } },
+            "close_source_branch": false,
+        });
+        let defaults = [json!({ "user": { "uuid": "{a}" } })];
+        let mut posted = Value::Null;
+        let mut asked = 0;
+        let pull = opened(
+            &creating("main"),
+            &defaults,
+            "{me}",
+            |body| {
+                posted = body;
+                Ok(made.clone())
+            },
+            |number| {
+                asked = number;
+                Ok(pulls::pull_of(&made, &Value::Null, "{me}"))
+            },
+        )
+        .unwrap();
+        assert_eq!(posted, opening(&creating("main"), &defaults, "{me}"));
+        assert_eq!(asked, 12);
+        assert_eq!(
+            (
+                pull.number,
+                pull.title.as_str(),
+                pull.branch.as_str(),
+                pull.base.as_str()
+            ),
+            (12, "Export", "feat/x", "main")
+        );
+        assert_eq!(
+            (pull.state.as_str(), pull.draft, pull.delete_branch),
+            ("open", true, Some(false))
+        );
+
+        let unread = opened(
+            &creating("main"),
+            &[],
+            "{me}",
+            |_| Ok(made.clone()),
+            |_| Err("Bitbucket answered 404: gone".into()),
+        )
+        .unwrap();
+        assert_eq!((unread.number, unread.draft), (12, true));
+
+        let refused = opened(
+            &creating("main"),
+            &[],
+            "{me}",
+            |_| Err("Bitbucket answered 400: There are no changes to be pulled".into()),
+            |_| panic!("nothing to read"),
+        )
+        .unwrap_err();
+        assert!(refused.contains("feat/x has no changes to merge into main"));
+    }
+
+    #[test]
+    fn explains_why_bitbucket_did_not_open_the_pull_request() {
+        let title = |error: &str, base: &str| {
+            let found: Value = serde_json::from_str(&refusal(error.into(), &creating(base)))
+                .unwrap_or(json!({ "title": { "en": error } }));
+            (found["title"]["en"].clone(), found["title"]["fr"].clone())
+        };
+        assert_eq!(
+            title(
+                "Bitbucket answered 400: There are no changes to be pulled",
+                "main"
+            ),
+            (
+                json!("feat/x has no changes to merge into main"),
+                json!("feat/x n’a aucun changement à fusionner dans main")
+            )
+        );
+        assert_eq!(
+            title("Bitbucket answered 400: A pull request already exists", "").0,
+            json!("A pull request from feat/x into the main branch is already open")
+        );
+        assert_eq!(
+            refusal(
+                "Bitbucket answered 400: bad title".into(),
+                &creating("main")
+            ),
+            "Bitbucket answered 400: bad title"
+        );
+        assert_eq!(
+            refusal(
+                "Bitbucket answered 404: no changes".into(),
+                &creating("main")
+            ),
+            "Bitbucket answered 404: no changes"
         );
     }
 
