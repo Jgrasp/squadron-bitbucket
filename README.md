@@ -1,6 +1,6 @@
 # Bitbucket
 
-A [Squadron](https://github.com/Jgrasp/squadron) extension that brings the pull requests and Pipelines runs of your Bitbucket Cloud projects into Squadron.
+A [Squadron](https://github.com/akki-team/squadron) extension that brings the pull requests and Pipelines runs of your Bitbucket Cloud projects into Squadron.
 
 ## Use
 
